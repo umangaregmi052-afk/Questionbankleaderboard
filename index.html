@@ -1012,7 +1012,12 @@ async function submitAnswer(questionId) {
     const response = await fetch('/.netlify/functions/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: questionObj.q, answer: answer })
+      body: JSON.stringify({ 
+  question: questionObj.q, 
+  answer: answer,
+  username: currentUser ? currentUser.username : null,
+  questionId: questionId
+})
     });
 
     if (!response.ok) throw new Error('Server error: ' + response.status);
