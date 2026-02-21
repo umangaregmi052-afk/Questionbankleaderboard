@@ -36,6 +36,12 @@ exports.handler = async function(event) {
       return { statusCode: 401, body: JSON.stringify({ error: 'Incorrect password.' }) };
     }
 
+    // Fetch this user's completed question IDs from student_progress
+    const progress = await sql`
+      SELECT question_id FROM student_progress WHERE username = ${username}
+    `;
+    const completedIds = progress.map(r => r.question_id);
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -44,6 +50,7 @@ exports.handler = async function(event) {
         username: user.username,
         firstName: user.first_name,
         lastName: user.last_name,
+        completedIds,
       }),
     };
   } catch (err) {
