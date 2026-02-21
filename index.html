@@ -441,21 +441,31 @@ async function doSignup() {
   if (pass !== confirm) return showAuthError('signup-error', 'Passwords do not match.');
 
   const username = `${last.toLowerCase().replace(/\s+/g,'')}_${first.toLowerCase().replace(/\s+/g,'')}`;
-
-  // Check if username taken
-  try {
-    const existing = await window.storage.get(`user:${username}`, true);
-    if (existing) return showAuthError('signup-error', `Username "${username}" is already taken.`);
-  } catch(e) { /* key doesn't exist, good */ }
-
-  // Hash password (simple hash for demo — for production use bcrypt server-side)
   const hashed = await hashPassword(pass);
 
-  const userData = { username, firstName: first, lastName: last, passwordHash: hashed, joinedAt: Date.now(), done: [] };
-  await window.storage.set(`user:${username}`, JSON.stringify(userData), true);
+  const btn = document.querySelector('#view-signup .auth-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
 
-  currentUser = userData;
-  enterApp();
+  try {
+    const res = await fetch('/.netlify/functions/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, firstName: first, lastName: last, passwordHash: hashed }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showAuthError('signup-error', data.error || 'Signup failed. Try again.');
+    } else {
+      currentUser = { username, firstName: first, lastName: last };
+      enterApp();
+    }
+  } catch(e) {
+    showAuthError('signup-error', 'Could not connect to server. Try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Account';
+  }
 }
 
 async function doLogin() {
@@ -464,16 +474,29 @@ async function doLogin() {
 
   if (!username || !pass) return showAuthError('login-error', 'Please enter your username and password.');
 
+  const hashed = await hashPassword(pass);
+  const btn = document.querySelector('#view-login .auth-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
   try {
-    const result = await window.storage.get(`user:${username}`, true);
-    if (!result) return showAuthError('login-error', 'Username not found. Check spelling or sign up.');
-    const userData = JSON.parse(result.value);
-    const hashed = await hashPassword(pass);
-    if (hashed !== userData.passwordHash) return showAuthError('login-error', 'Incorrect password.');
-    currentUser = userData;
-    enterApp();
+    const res = await fetch('/.netlify/functions/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, passwordHash: hashed }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showAuthError('login-error', data.error || 'Login failed. Try again.');
+    } else {
+      currentUser = { username: data.username, firstName: data.firstName, lastName: data.lastName };
+      enterApp();
+    }
   } catch(e) {
-    showAuthError('login-error', 'Username not found. Check spelling or sign up.');
+    showAuthError('login-error', 'Could not connect to server. Try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
   }
 }
 
@@ -503,9 +526,8 @@ async function hashPassword(pass) {
 
 // ── SAVE PROGRESS ──────────────────────────────────────────────
 async function saveProgress() {
-  if (!currentUser) return;
-  currentUser.done = [...done];
-  await window.storage.set(`user:${currentUser.username}`, JSON.stringify(currentUser), true);
+  // Progress is saved to Neon via the grade function when answers are correct
+  // No local storage needed
 }
 
 // ── TABS ───────────────────────────────────────────────────────
@@ -1006,12 +1028,7 @@ async function submitAnswer(questionId) {
     const response = await fetch('/.netlify/functions/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: questionObj.q,
-        answer: answer,
-        username: currentUser ? currentUser.username : null,
-        questionId: questionId
-      })
+      body: JSON.stringify({ question: questionObj.q, answer: answer })
     });
 
     if (!response.ok) throw new Error('Server error: ' + response.status);
