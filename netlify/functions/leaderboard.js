@@ -1,9 +1,4 @@
 // netlify/functions/leaderboard.js
-// Place this file at: your-project/netlify/functions/leaderboard.js
-//
-// Required env vars in Netlify:
-//   DATABASE_URL — your Neon PostgreSQL connection string
-
 const postgres = require('postgres');
 
 function getDb() {
@@ -19,7 +14,6 @@ function getDb() {
 }
 
 exports.handler = async function(event, context) {
-  // Only allow GET
   if (event.httpMethod !== 'GET') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
@@ -28,18 +22,24 @@ exports.handler = async function(event, context) {
   try {
     sql = getDb();
 
-    // Get count of completed questions per user, sorted by most done
+    // Join users table with student_progress so ALL users appear,
+    // even those who haven't answered any questions yet (COUNT = 0)
     const rows = await sql`
       SELECT 
-        username,
-        COUNT(*) AS questions_done
-      FROM student_progress
-      GROUP BY username
-      ORDER BY questions_done DESC
+        u.username,
+        u.first_name,
+        u.last_name,
+        COUNT(sp.question_id) AS questions_done
+      FROM users u
+      LEFT JOIN student_progress sp ON u.username = sp.username
+      GROUP BY u.username, u.first_name, u.last_name
+      ORDER BY questions_done DESC, u.username ASC
     `;
 
     const leaderboard = rows.map(row => ({
       username: row.username,
+      firstName: row.first_name,
+      lastName: row.last_name,
       done: Number(row.questions_done),
     }));
 
