@@ -519,33 +519,41 @@ function switchTab(tab) {
 
 // ── LEADERBOARD ────────────────────────────────────────────────
 async function loadLeaderboard() {
-  document.getElementById('lb-table').innerHTML = '<div class="lb-loading">Loading...</div>';
+  document.getElementById('lb-table').innerHTML = '<div class="lb-loading" style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
   document.getElementById('lb-podium').innerHTML = '';
 
   try {
-    const keys = await window.storage.list('user:', true);
-    const users = [];
+    const response = await fetch('/.netlify/functions/leaderboard');
+    if (!response.ok) throw new Error('Server error');
+    const rows = await response.json();
 
-    for (const key of (keys.keys || [])) {
-      try {
-        const r = await window.storage.get(key, true);
-        if (r) {
-          const u = JSON.parse(r.value);
-          users.push({
-            username: u.username,
-            firstName: u.firstName,
-            lastName: u.lastName,
-            done: (u.done || []).length,
-            pct: Math.round(((u.done || []).length / data.length) * 100)
-          });
+    const users = rows.map(row => {
+      const isMe = currentUser && row.username === currentUser.username;
+      let firstName = '', lastName = '';
+      if (isMe) {
+        firstName = currentUser.firstName || '';
+        lastName = currentUser.lastName || '';
+      } else {
+        const parts = row.username.split('_');
+        if (parts.length >= 2) {
+          lastName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+          firstName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+        } else {
+          firstName = row.username;
         }
-      } catch(e) {}
-    }
+      }
+      return {
+        username: row.username,
+        firstName,
+        lastName,
+        done: row.done,
+        pct: Math.round((row.done / data.length) * 100)
+      };
+    });
 
-    users.sort((a, b) => b.done - a.done);
     renderLeaderboard(users);
   } catch(e) {
-    document.getElementById('lb-table').innerHTML = '<div class="lb-empty">Could not load leaderboard.</div>';
+    document.getElementById('lb-table').innerHTML = '<div class="lb-empty" style="padding:60px;text-align:center;color:var(--muted)">Could not load leaderboard. Please try again.</div>';
   }
 }
 
@@ -998,7 +1006,12 @@ async function submitAnswer(questionId) {
     const response = await fetch('/.netlify/functions/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: questionObj.q, answer: answer })
+      body: JSON.stringify({
+        question: questionObj.q,
+        answer: answer,
+        username: currentUser ? currentUser.username : null,
+        questionId: questionId
+      })
     });
 
     if (!response.ok) throw new Error('Server error: ' + response.status);
