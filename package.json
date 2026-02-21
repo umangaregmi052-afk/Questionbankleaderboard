@@ -1,0 +1,8 @@
+{
+  "name": "question-bank",
+  "version": "1.0.0",
+  "description": "Student question bank with AI grading",
+  "dependencies": {
+    "postgres": "^3.4.4"
+  }
+}
